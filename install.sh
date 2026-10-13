@@ -95,7 +95,7 @@ fi
 if ! gh auth status -h github.com >/dev/null 2>&1; then
   say "Sign in to GitHub in the browser window that opens (copy the one-time code shown here)."
   gh auth login -h github.com -p https -w -s read:packages </dev/tty
-elif ! gh auth status -h github.com 2>&1 | grep -q "read:packages"; then
+elif ! gh auth status -h github.com 2>&1 | grep -Eq "(read|write):packages"; then
   say "Shift's images need one more GitHub permission (read packages). Approve it in the browser:"
   gh auth refresh -h github.com -s read:packages </dev/tty
 fi
