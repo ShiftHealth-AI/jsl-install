@@ -131,6 +131,7 @@ ok "Settings in $DIR"
 # ---------------------------------------------------------------------------------------------------------------
 step "4 of 4 · Starting Shift (the first time downloads about 1 GB)"
 dc() { docker compose -p jsl-qa --project-directory "$DIR" -f "$DIR/compose.yml" "$@"; }
+: >"$DIR/start.log"   # this run's Docker output (shown when something fails)
 if $RESET; then
   [ "$(ask "Wipe all of Shift's data on this Mac? Type yes: ")" = yes ] || stop "Nothing wiped."
   dc down -v --remove-orphans >/dev/null 2>&1 || true
@@ -141,8 +142,8 @@ if ! dc ps --services --status running 2>/dev/null | grep -qx proxy \
    && lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   stop "Another app is using port $PORT, which Shift needs." "Quit it (or restart the Mac), then run the same line again."
 fi
-[ -n "${JSL_QA_NO_PULL:-}" ] || JSL_QA_PORT="$PORT" dc pull --quiet || stop "Couldn't download Shift." "Run the same line again; if it repeats, send this to Ward."
-JSL_QA_PORT="$PORT" dc up -d --remove-orphans --wait >"$DIR/start.log" 2>&1 \
+[ -n "${JSL_QA_NO_PULL:-}" ] || JSL_QA_PORT="$PORT" dc pull --quiet 2>>"$DIR/start.log" || stop "Couldn't download Shift." "Run the same line again; if it repeats, send this to Ward."
+JSL_QA_PORT="$PORT" dc up -d --remove-orphans --wait >>"$DIR/start.log" 2>&1 \
   || { tail -5 "$DIR/start.log"; stop "Shift didn't start." "Send Ward the output of:  docker compose -p jsl-qa logs --tail 50"; }
 for _ in $(seq 1 60); do curl -fsS "$URL/api/ready" >/dev/null 2>&1 && break; sleep 2; done
 curl -fsS "$URL/api/ready" >/dev/null 2>&1 || stop "Shift started but isn't answering at $URL yet." "Wait a minute and open it in the browser."
@@ -150,7 +151,7 @@ ok "Shift is running"
 
 if $RESEED || [ ! -f "$DIR/.seeded" ]; then
   say "Adding sample families, places, events and calendars (a minute)…"
-  cli() { dc run --rm --no-deps -e DATABASE_URL=postgres://jsl_migrator:jsl_migrator@db:5432/jsl web python -m jsl.cli "$@" >/dev/null; }
+  cli() { dc run --rm --no-deps -e DATABASE_URL=postgres://jsl_migrator:jsl_migrator@db:5432/jsl web python -m jsl.cli "$@" >>"$DIR/start.log" 2>&1; }
   cli seed --admin "$EMAIL" && cli seed-demo && cli seed-qa --lead "$EMAIL" && cli seed-calendar \
     || stop "The sample data didn't load." "Run the same line again with --reseed."
   touch "$DIR/.seeded"
